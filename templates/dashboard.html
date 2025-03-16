@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Water Tank Monitoring</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .dashboard { display: flex; gap: 20px; }
+        .tank-container { width: 300px; }
+        .tank {
+            width: 200px;
+            height: 300px;
+            border: 3px solid #333;
+            margin: 20px;
+            position: relative;
+            border-radius: 10px;
+            background: #f1f1f1;
+        }
+        .water {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            background: #2196F3;
+            transition: height 0.5s;
+        }
+        .chart-container { flex: 1; max-width: 800px; }
+        .tabs { display: flex; margin-bottom: 10px; }
+        .tab { padding: 10px; cursor: pointer; border: 1px solid #ccc; }
+        .tab.active { background: #2196F3; color: white; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+        th { background: #2196F3; color: white; }
+    </style>
+</head>
+<body>
+    <h1>Water Tank Monitoring</h1>
+    <div class="tabs">
+        <div class="tab active" onclick="showTab('dashboard')">Dashboard</div>
+        <div class="tab" onclick="showTab('history')">History</div>
+    </div>
+    
+    <div id="dashboard" class="tab-content active">
+        <div class="dashboard">
+            <div class="tank-container">
+                <h2>Current Level</h2>
+                <div class="tank">
+                    <div class="water" id="waterLevel"></div>
+                </div>
+                <div id="stats">
+                    <p>Distance: <span id="currentDistance">-</span> cm</p>
+                    <p>Water Level: <span id="currentLevel">-</span> cm</p>
+                    <p>Last Update: <span id="timestamp">-</span></p>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <h2>History (Last 24 Readings)</h2>
+                <canvas id="historyChart"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <div id="history" class="tab-content">
+        <h2>Water Level History</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>Water Level (cm)</th>
+                </tr>
+            </thead>
+            <tbody id="historyTable">
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        const tankHeight = {{ tank_height }};
+        let chart = null;
+
+        function updateDisplay(data) {
+            const waterLevel = tankHeight - data.distance;
+            const waterHeight = (waterLevel / tankHeight) * 100;
+            document.getElementById('waterLevel').style.height = `${waterHeight}%`;
+            document.getElementById('currentDistance').textContent = data.distance.toFixed(1);
+            document.getElementById('currentLevel').textContent = waterLevel.toFixed(1);
+            document.getElementById('timestamp').textContent = data.timestamp;
+        }
+
+        function updateChart(history) {
+            const ctx = document.getElementById('historyChart').getContext('2d');
+            const labels = history.map(entry => entry.timestamp.split(' ')[1]);
+            const data = history.map(entry => tankHeight - entry.distance);
+            if (chart) chart.destroy();
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Water Level (cm)',
+                        data: data,
+                        borderColor: '#2196F3',
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: { y: { min: 0, max: tankHeight } }
+                }
+            });
+        }
+
+        function updateHistoryTable(history) {
+            const tableBody = document.getElementById('historyTable');
+            tableBody.innerHTML = '';
+            history.forEach(entry => {
+                const row = `<tr><td>${entry.timestamp}</td><td>${(tankHeight - entry.distance).toFixed(1)}</td></tr>`;
+                tableBody.innerHTML += row;
+            });
+        }
+
+        function fetchData() {
+            fetch('/get_last_distance')
+                .then(response => response.json())
+                .then(data => updateDisplay(data));
+
+            fetch('/get_history')
+                .then(response => response.json())
+                .then(history => {
+                    updateChart(history);
+                    updateHistoryTable(history);
+                });
+        }
+
+        function showTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+            document.querySelector(`.tab[onclick="showTab('${tabId}')"]`).classList.add('active');
+        }
+
+        setInterval(fetchData, 2000);
+        fetchData();
+    </script>
+</body>
+</html>
